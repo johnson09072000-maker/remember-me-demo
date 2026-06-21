@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remember Me - 實時生活視訊通話 PoC</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+    <style>
+        body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #050811; color: #E0E0E0; }
+        .serif-font { font-family: 'Noto Serif TC', serif; }
+        .neon-glow { box-shadow: 0 0 30px rgba(34, 211, 238, 0.3); border-color: rgba(34, 211, 238, 0.5); }
+        .bg-cyber { background: radial-gradient(circle at top, #0f1a30 0%, #050811 100%); }
+        .live-dot { animation: blink 1.5s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+    </style>
+</head>
+<body class="bg-cyber flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-sm bg-slate-900/95 rounded-[40px] p-6 border-2 neon-glow relative overflow-hidden">
+        
+        <div class="flex justify-between items-center text-[10px] text-cyan-400/80 tracking-widest uppercase mb-4">
+            <span class="flex items-center gap-1">
+                <span class="w-2 h-2 bg-emerald-400 rounded-full live-dot"></span>
+                Remember Me 實時生活流
+            </span>
+            <span id="time-display">00:00</span>
+        </div>
+
+        <div class="w-full bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 aspect-[3/4] relative flex flex-col justify-between p-4 shadow-2xl">
+            
+            <div class="flex justify-between items-start w-full z-10">
+                <div class="bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 max-w-[80%]">
+                    <p class="text-[11px] font-bold text-white tracking-wide">陳小晃 (Lucky)</p>
+                    <p id="current-habit" class="text-[9px] text-cyan-400 truncate">🐾 正在載入生活作息...</p>
+                </div>
+                <span class="bg-emerald-500 text-black text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">LIVE</span>
+            </div>
+
+            <div class="absolute inset-0 z-0 flex items-center justify-center">
+                <model-viewer 
+                    id="pet-model"
+                    src="https://modelviewer.dev/shared-assets/models/RobotExpressive.glb" 
+                    auto-rotate
+                    camera-controls
+                    touch-action="pan-y"
+                    autoplay
+                    animation-name="Wave"
+                    shadow-intensity="1"
+                    class="w-full h-full bg-transparent">
+                </model-viewer>
+            </div>
+
+            <div class="w-full flex justify-center gap-6 z-10">
+                <button onclick="triggerCall()" class="px-8 py-2.5 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-black font-bold text-xs tracking-widest flex items-center gap-1 shadow-lg shadow-cyan-500/20 transition">
+                    📞 呼喚 Lucky
+                </button>
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <p class="serif-font text-[11px] italic text-slate-400 tracking-wider">「死亡不是終點，被遺忘了才是」</p>
+        </div>
+    </div>
+
+    <div class="mt-6 flex gap-4 text-xs text-slate-600 bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+        <button onclick="updateTimeAndHabit('morning')" class="hover:text-amber-400 transition">⏰ 模擬早上點進去</button>
+        <span>|</span>
+        <button onclick="updateTimeAndHabit('afternoon')" class="hover:text-cyan-400 transition">☀️ 模擬下午點進去</button>
+        <span>|</span>
+        <button onclick="updateTimeAndHabit('night')" class="hover:text-indigo-400 transition">🌙 模擬深夜點進去</button>
+    </div>
+
+    <script>
+        const model = document.getElementById('pet-model');
+        const habitText = document.getElementById('current-habit');
+
+        // 1. 初始化：模擬真實時間作息
+        function initTime() {
+            const now = new Date();
+            document.getElementById('time-display').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            const hour = now.getHours();
+            if (hour >= 6 && hour < 12) updateTimeAndHabit('morning');
+            else if (hour >= 12 && hour < 18) updateTimeAndHabit('afternoon');
+            else updateTimeAndHabit('night');
+        }
+
+        // 2. 核心功能：每次點進去或切換時段，後端/前端動態變更動作，拒絕死板影片
+        function updateTimeAndHabit(slot) {
+            if (slot === 'morning') {
+                document.getElementById('time-display').innerText = "08:15";
+                habitText.innerText = "🐾 目前狀態：在門口搖尾巴等門中...";
+                model.animationName = "Walking"; // 模擬走動等門
+                startRandomMicroBehaviors(['Walking', 'Idling']); // 隨機微動作庫 A
+            } else if (slot === 'afternoon') {
+                document.getElementById('time-display').innerText = "14:30";
+                habitText.innerText = "🐾 目前狀態：在客廳曬太陽、四處張望...";
+                model.animationName = "Idling"; // 待機張望
+                startRandomMicroBehaviors(['Idling', 'Wave']); // 隨機微動作庫 B
+            } else if (slot === 'night') {
+                document.getElementById('time-display').innerText = "23:45";
+                habitText.innerText = "🌙 目前狀態：在沙發角落沉睡中...";
+                model.animationName = "Death"; // 機器人的 Death 動作是躺下，剛好用來模擬毛孩趴下熟睡
+                clearInterval(behaviorInterval); // 深夜熟睡，停止隨機微動作，保持安靜
+            }
+        }
+
+        // 3. 隨機微動作計時器：消除「固定影片」的虛假感
+        let behaviorInterval;
+        function startRandomMicroBehaviors(actions) {
+            clearInterval(behaviorInterval);
+            // 每隔 8 秒，AI 就會自動隨機幫毛孩換一個待機微動作！
+            behaviorInterval = setInterval(() => {
+                const randomAction = actions[Math.floor(Math.random() * actions.length)];
+                model.animationName = randomAction;
+                console.log("✓ AI自主行為觸發：切換至微動作 ->", randomAction);
+            }, 8000);
+        }
+
+        // 4. 點擊呼喚：視訊接通，立刻強制中斷待機，觸發最激烈的雀躍動作
+        function triggerCall() {
+            clearInterval(behaviorInterval); // 中斷日常作息
+            habitText.innerText = '📞 視訊電話已接通 ‧ Lucky 正在高興地回應你！';
+            model.animationName = "Jump"; // 強制播放跳躍回應
+            
+            // 播放聲音軌跡
+            const audio = new Audio('https://www.w3schools.com/html/horse.mp3');
+            audio.play().catch(e => console.log("等待用戶手動觸發聲音"));
+        }
+
+        window.onload = initTime;
+    </script>
+</body>
+</html>
