@@ -38,19 +38,20 @@
                 <span class="bg-emerald-500 text-black text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">LIVE</span>
             </div>
 
-            <div class="absolute inset-0 z-0 flex items-center justify-center">
-                <model-viewer 
-                    id="pet-model"
-                    src="https://modelviewer.dev/shared-assets/models/RobotExpressive.glb" 
-                    auto-rotate
-                    camera-controls
-                    touch-action="pan-y"
-                    autoplay
-                    animation-name="Idling"
-                    shadow-intensity="1"
-                    class="w-full h-full bg-transparent">
-                </model-viewer>
-            </div>
+           <div class="absolute inset-0 z-0 flex items-center justify-center">
+    <model-viewer 
+        id="pet-model"
+        src="https://modelviewer.dev/shared-assets/models/Cats.glb" 
+        alt="Remember Me 3D 機器橘貓分身"
+        auto-rotate
+        camera-controls
+        touch-action="pan-y"
+        autoplay
+        animation-name="01_Run"
+        shadow-intensity="1"
+        class="w-full h-full bg-transparent">
+    </model-viewer>
+</div>
 
             <div class="w-full flex justify-center gap-6 z-10">
                 <button onclick="triggerCall()" class="px-8 py-2.5 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-black font-bold text-xs tracking-widest flex items-center gap-1 shadow-lg shadow-cyan-500/20 transition">
@@ -73,95 +74,101 @@
     </div>
 
     <script>
-        const PET_ID = 'lucky_001';
-        const model = document.getElementById('pet-model');
-        const habitText = document.getElementById('current-habit');
+      const PET_ID = 'lucky_001';
+const model = document.getElementById('pet-model');
+const habitText = document.getElementById('current-habit');
+
+let isLocalDB = false;
+let callActionName = "01_Run"; // 貓咪的高興回應動作：奔跑過來
+let behaviorInterval;
+
+// 1. 偵測環境並初始化
+async function initSystem() {
+    document.getElementById('time-display').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+    // 偵測是否在本地運行
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        isLocalDB = true;
+        document.getElementById('stream-title').innerText = "Remember Me SQLite 資料流";
+        loadPetDataFromDB();
+    } else {
+        // GitHub 雲端演示模式
+        isLocalDB = false;
+        document.getElementById('stream-title').innerText = "Remember Me 雲端演示流";
+        changeTimeSlot('afternoon'); // 預設下午
+    }
+}
+
+// 2. 從真實後端 SQLite 撈取資料 (本地專用)
+async function loadPetDataFromDB() {
+    try {
+        const response = await fetch(`/api/pet/${PET_ID}`);
+        const data = await response.json();
         
-        let isLocalDB = false;
-        let callActionName = "Jump";
-        let behaviorInterval;
+        document.getElementById('pet-name').innerText = data.name;
+        habitText.innerText = data.current_habit_text;
+        
+        // 注意：本地測試時，如果後端資料庫寫的是 Astronaut.glb，我們可以強制讓它在前端讀取橘貓模型
+        model.src = "https://modelviewer.dev/shared-assets/models/Cats.glb";
+        model.animationName = data.idle_animation;
+        
+        // 動作重定向對齊
+        if(data.idle_animation === "Idling") model.animationName = "03_Idle";
+        if(data.idle_animation === "Walking") model.animationName = "02_Walk";
+    } catch (e) {
+        habitText.innerText = "❌ 本地資料庫連線失敗";
+    }
+}
 
-        // 1. 偵測環境並初始化
-        async function initSystem() {
-            document.getElementById('time-display').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            
-            // 如果是在本地 localhost 運行，啟動真實資料庫數據流
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                isLocalDB = true;
-                document.getElementById('stream-title').innerText = "Remember Me SQLite 資料流";
-                loadPetDataFromDB();
-            } else {
-                // 如果是在 GitHub Pages 雲端運行，啟動智慧 Demo 演示模式，拒絕死機紅字！
-                isLocalDB = false;
-                document.getElementById('stream-title').innerText = "Remember Me 雲端演示流";
-                changeTimeSlot('afternoon'); 
-            }
+// 3. 變更時段與作息邏輯（全面對齊機器橘貓動作：01_Run, 02_Walk, 03_Idle）
+async function changeTimeSlot(slot) {
+    if (isLocalDB) {
+        try {
+            await fetch(`/api/pet/time-slot`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: PET_ID, slot: slot })
+            });
+            loadPetDataFromDB();
+        } catch (e) {}
+    } else {
+        // GitHub 雲端演示端：橘貓專屬作息微動作
+        clearInterval(behaviorInterval);
+        if (slot === 'morning') {
+            habitText.innerText = "🐾 目前狀態：橘貓正在房間裡開心地奔跑...";
+            model.animationName = "01_Run"; // 貓咪奔跑
+            startRandomBehaviors(['01_Run', '02_Walk']);
+        } else if (slot === 'afternoon') {
+            habitText.innerText = "🐾 目前狀態：在客廳曬太陽、慢走四處張望...";
+            model.animationName = "02_Walk"; // 貓咪慢走
+            startRandomBehaviors(['02_Walk', '03_Idle']);
+        } else if (slot === 'night') {
+            habitText.innerText = "🌙 目前狀態：窩在虛擬沙發角落安靜待機...";
+            model.animationName = "03_Idle"; // 貓咪安靜待機
         }
+    }
+}
 
-        // 2. 從真實後端撈取資料 (本地專用)
-        async function loadPetDataFromDB() {
-            try {
-                const response = await fetch(`/api/pet/${PET_ID}`);
-                const data = await response.json();
-                document.getElementById('pet-name').innerText = data.name;
-                habitText.innerText = data.current_habit_text;
-                model.src = data.model_url;
-                model.animationName = data.idle_animation;
-                callActionName = data.call_animation;
-            } catch (e) {
-                habitText.innerText = "❌ 本地資料庫連線失敗";
-            }
-        }
+// 隨機微動作計時器 (消除虛假感)
+function startRandomBehaviors(actions) {
+    behaviorInterval = setInterval(() => {
+        const random = actions[Math.floor(Math.random() * actions.length)];
+        model.animationName = random;
+        console.log("✓ 橘貓自主行為切換 ->", random);
+    }, 7000);
+}
 
-        // 3. 變更時段與作息邏輯 (相容本地與 GitHub)
-        async function changeTimeSlot(slot) {
-            if (isLocalDB) {
-                // 本地端：直接發 POST 修改真實資料庫
-                try {
-                    await fetch(`/api/pet/time-slot`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: PET_ID, slot: slot })
-                    });
-                    loadPetDataFromDB();
-                } catch (e) {}
-            } else {
-                // GitHub 雲端演示端：使用前端模擬計時器，讓外國夥伴看見「AI自主行為庫自己動」
-                clearInterval(behaviorInterval);
-                if (slot === 'morning') {
-                    habitText.innerText = "🐾 目前狀態：在門口等門、開心地走來走去...";
-                    model.animationName = "Walking";
-                    startRandomBehaviors(['Walking', 'Idling']);
-                } else if (slot === 'afternoon') {
-                    habitText.innerText = "🐾 目前狀態：在客廳曬太陽、四處張望...";
-                    model.animationName = "Idling";
-                    startRandomBehaviors(['Idling', 'Wave']);
-                } else if (slot === 'night') {
-                    habitText.innerText = "🌙 目前狀態：在虛擬沙發角落熟睡中...";
-                    model.animationName = "Death"; 
-                }
-            }
-        }
+// 4. 呼喚按鈕
+function triggerCall() {
+    clearInterval(behaviorInterval);
+    habitText.innerText = '📞 視訊已接通 ‧ 機器橘貓正在對你搖尾巴！';
+    model.animationName = "01_Run"; // 強制讓貓咪跑過來互動
+    
+    const audio = new Audio('https://www.w3schools.com/html/horse.mp3');
+    audio.play().catch(e => console.log("等待手動點擊觸發聲音"));
+}
 
-        // 隨機微動作計時器 (消除虛假感)
-        function startRandomBehaviors(actions) {
-            behaviorInterval = setInterval(() => {
-                const random = actions[Math.floor(Math.random() * actions.length)];
-                model.animationName = random;
-            }, 7000);
-        }
-
-        // 4. 呼喚 Lucky 按鈕
-        function triggerCall() {
-            clearInterval(behaviorInterval);
-            habitText.innerText = '📞 視訊已接通 ‧ Lucky 正在高興地回應你！';
-            model.animationName = callActionName;
-            
-            const audio = new Audio('https://www.w3schools.com/html/horse.mp3');
-            audio.play().catch(e => console.log("等待手動點擊觸發聲音"));
-        }
-
-        window.onload = initSystem;
+window.onload = initSystem;
     </script>
 </body>
 </html>
