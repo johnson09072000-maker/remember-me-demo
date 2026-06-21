@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Remember Me - 24H 實時生命還原系統</title>
+    <title>Remember Me - 24H 實時生命軸與變幻系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
@@ -14,6 +14,9 @@
         .bg-cyber { background: radial-gradient(circle at top, #0f1a30 0%, #050811 100%); }
         .live-dot { animation: blink 1.5s infinite; }
         @keyframes blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+        /* 橫向時間軸拖動條美化 */
+        input[type="range"] { -webkit-appearance: none; background: #1e293b; border-radius: 9999px; width: 100%; height: 6px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #22d3ee; cursor: pointer; box-shadow: 0 0 10px #22d3ee; }
     </style>
 </head>
 <body class="bg-cyber flex flex-col items-center justify-center min-h-screen p-4">
@@ -25,17 +28,17 @@
                 <span class="w-2 h-2 bg-emerald-400 rounded-full live-dot"></span>
                 <span id="stream-title">Remember Me 實時通話流</span>
             </span>
-            <span id="time-display">00:00</span>
+            <span id="time-display">00:00:00</span>
         </div>
 
         <div class="w-full bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 aspect-[3/4] relative flex flex-col justify-between p-4 shadow-2xl">
             
             <div class="flex justify-between items-start w-full z-10">
                 <div class="bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 max-w-[80%]">
-                    <p id="pet-name" class="text-[11px] font-bold text-white tracking-wide">載入中...</p>
-                    <p id="current-habit" class="text-[9px] text-cyan-400 truncate">🐾 正在讀取實時作息表...</p>
+                    <p id="pet-name" class="text-[11px] font-bold text-white tracking-wide">陳小晃 (Lucky)</p>
+                    <p id="current-habit" class="text-[9px] text-cyan-400 truncate">🐾 正在載入實時生活流...</p>
                 </div>
-                <span class="bg-emerald-500 text-black text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">24H LIVE</span>
+                <span id="mode-badge" class="bg-emerald-500 text-black text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">LIVE</span>
             </div>
 
             <div class="absolute inset-0 z-0 flex items-center justify-center">
@@ -60,89 +63,126 @@
             </div>
         </div>
 
+        <div class="mt-5 bg-slate-950/80 border border-slate-800 rounded-2xl p-4">
+            <div class="flex justify-between items-center mb-2">
+                <label class="text-[11px] font-bold text-slate-400 tracking-wider">📊 24小時生活時間軸展示</label>
+                <span id="timeline-hour-txt" class="text-xs text-cyan-400 font-bold bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-800/30">跟隨系統</span>
+            </div>
+            <input type="range" id="time-slider" min="-1" max="23" value="-1" class="my-2" oninput="handleSliderChange(this.value)">
+            <div class="flex justify-between text-[8px] text-slate-600 mt-1 uppercase tracking-tighter">
+                <span>00:00 (深夜熟睡)</span>
+                <span>12:00 (中午用餐)</span>
+                <span>23:00 (入夜休息)</span>
+            </div>
+        </div>
+
         <div class="text-center mt-4">
             <p class="serif-font text-[11px] italic text-slate-400 tracking-wider">「死亡不是終點，被遺忘了才是」</p>
         </div>
     </div>
 
-    <div class="mt-6 text-center text-[10px] text-slate-500">
-        💡 系統每秒自動對齊現實時間。若在雲端展示模式，將自動依時間載入對應生活習慣。
-    </div>
-
     <script>
-        const PET_ID = 'lucky_001';
         const model = document.getElementById('pet-model');
         const habitText = document.getElementById('current-habit');
+        const sliderHourTxt = document.getElementById('timeline-hour-txt');
+        const modeBadge = document.getElementById('mode-badge');
         
-        let isLocalDB = false;
-        let callActionName = "Run"; 
-        let voiceUrl = "";
+        let isManualMode = false;
+        let manualHour = 0;
+        let loopInterval;
+        let globalCurrentSubAnim = "Survey";
 
-        async function initSystem() {
-            // 1. 每秒更新一次時間顯示
+        function initSystem() {
+            // 時鐘每秒跳動
             setInterval(() => {
-                const now = new Date();
-                document.getElementById('time-display').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                if (!isManualMode) {
+                    const now = new Date();
+                    document.getElementById('time-display').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                    updatePetBehavior(now.getHours());
+                }
             }, 1000);
 
-            // 2. 判斷所處環境
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                isLocalDB = true;
-                document.getElementById('stream-title').innerText = "Remember Me 24H 真實資料流";
-                syncWithRealTime();
-            } else {
-                isLocalDB = false;
-                document.getElementById('stream-title').innerText = "Remember Me 雲端實時演示";
-                runCloudDemoFlow();
+            // 啟動隨機變幻大腦（每 6 秒在後台偷偷換一個微動作描述，消除虛假感）
+            startDynamicBehaviorEngine();
+        }
+
+        // 核心排程演算法：決定每個整點的生活大方向
+        function updatePetBehavior(hour) {
+            if (hour >= 0 && hour < 6) {
+                // 深夜熟睡時間：模擬你所說的隨機換睡姿、換位置
+                if (globalCurrentSubAnim === "Survey") {
+                    habitText.innerText = "🌙 深夜熟睡中... Lucky 轉了個身，正用【蜷縮姿勢】在毯子裡做夢。";
+                } else {
+                    habitText.innerText = "🌙 深夜熟睡中... Lucky 稍微動了動，換成【側趴姿勢】熟睡中。";
+                }
+                model.animationName = "Survey"; // 狐狸待機動作
+            } 
+            else if (hour >= 6 && hour < 11) {
+                habitText.innerText = "⏰ 早晨清醒時間，Lucky 精神飽滿地在房間裡慢慢散步巡邏...";
+                model.animationName = "Walk"; // 狐狸慢走動作
+            } 
+            else if (hour >= 11 && hour < 14) {
+                // 中午用餐時間：模擬隨機在不同的位置喝水或吃飯
+                if (globalCurrentSubAnim === "Walk") {
+                    habitText.innerText = "🍲 中午用餐時間，Lucky 漫步移動到【客廳左側】喝水...";
+                    model.animationName = "Walk";
+                } else {
+                    habitText.innerText = "🐾 中午放鬆時間，Lucky 正停在【飯碗前方】高興地四處張望...";
+                    model.animationName = "Survey";
+                }
+            } 
+            else if (hour >= 14 && hour < 18) {
+                habitText.innerText = "⚡ 下午活力充沛！Lucky 正在客廳開心地來回小奔跑玩耍...";
+                model.animationName = "Run"; // 狐狸奔跑動作
+            } 
+            else {
+                habitText.innerText = "🌙 傍晚陪伴時間，Lucky 正靜靜趴在沙發腳邊打瞌睡放空...";
+                model.animationName = "Survey";
             }
         }
 
-        // 本地端邏輯：直接拿當下的 Hour 去向 SQLite 資料庫要精確行為
-        async function syncWithRealTime() {
-            const currentHour = new Date().getHours();
-            try {
-                const response = await fetch(`/api/pet/${PET_ID}/time/${currentHour}`);
-                const data = await response.json();
+        // 隨機細節變幻引擎
+        function startDynamicBehaviorEngine() {
+            loopInterval = setInterval(() => {
+                const subAnims = ["Survey", "Walk", "Run"];
+                globalCurrentSubAnim = subAnims[Math.floor(Math.random() * subAnims.length)];
                 
-                document.getElementById('pet-name').innerText = data.name;
-                habitText.innerText = data.habit_text;
-                model.animationName = data.animation_name;
-                callActionName = data.call_animation;
-                voiceUrl = data.voice_url;
-                
-                console.log(`✓ 實時作息同步成功！當前時間：${currentHour}點，執行動作：${data.animation_name}`);
-            } catch (e) {
-                habitText.innerText = "❌ 無法同步本地實時作息表";
-            }
+                const activeHour = isManualMode ? manualHour : new Date().getHours();
+                updatePetBehavior(activeHour);
+            }, 6000);
         }
 
-        // 雲端展示邏輯：即使沒有後端，也能依據當下時間展示實時生活感
-        function runCloudDemoFlow() {
-            document.getElementById('pet-name').innerText = "陳小晃 (Lucky)";
-            const currentHour = new Date().getHours();
-            
-            if (currentHour >= 0 && currentHour < 6) {
-                habitText.innerText = "🌙 深夜熟睡時間，Lucky 正在窩在毯子裡香甜地做夢...";
-                model.animationName = "Survey";
-            } else if (currentHour >= 6 && currentHour < 12) {
-                habitText.innerText = "⏰ 早上清醒時間，Lucky 精神飽滿地在客廳慢慢散步巡邏...";
-                model.animationName = "Walk";
-            } else if (currentHour >= 12 && currentHour < 17) {
-                habitText.innerText = "⚡ 下午活力充沛！Lucky 正在客廳開心地小奔跑玩耍...";
-                model.animationName = "Run";
+        // 核心功能：當手指滑動橫向時間軸時觸發
+        function handleSliderChange(val) {
+            const hour = parseInt(val);
+            if (hour === -1) {
+                // 切回實時 LIVE 模式
+                isManualMode = false;
+                sliderHourTxt.innerText = "跟隨系統";
+                sliderHourTxt.className = "text-xs text-cyan-400 font-bold bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-800/30";
+                modeBadge.innerText = "LIVE";
+                modeBadge.className = "bg-emerald-500 text-black text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider";
+                updatePetBehavior(new Date().getHours());
             } else {
-                habitText.innerText = "🍲 晚餐與陪伴時間，Lucky 正乖巧地坐在客廳四處張望...";
-                model.animationName = "Survey";
+                // 切入 DEMO 時間軸展示模式
+                isManualMode = true;
+                manualHour = hour;
+                const displayTime = (hour < 10 ? '0' + hour : hour) + ':00:00';
+                document.getElementById('time-display').innerText = displayTime;
+                sliderHourTxt.innerText = `強制展示: ${hour} 點`;
+                sliderHourTxt.className = "text-xs text-amber-400 font-bold bg-amber-950/50 px-2 py-0.5 rounded border border-amber-800/30";
+                modeBadge.innerText = "DEMO";
+                modeBadge.className = "bg-amber-500 text-black text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider";
+                updatePetBehavior(hour);
             }
         }
 
         function triggerCall() {
-            habitText.innerText = '📞 視訊已接通 ‧ 正在從實時軌跡中猛然朝你跑來！';
-            model.animationName = callActionName;
+            habitText.innerText = '📞 視訊已接通 ‧ Lucky 聽到了爸爸的呼喚，正猛烈朝你跑來！';
+            model.animationName = "Run";
             
-            const targetVoice = voiceUrl || 'https://www.w3schools.com/html/horse.mp3';
-            const audio = new Audio(targetVoice);
-            audio.play().catch(e => console.log("等待手動點擊觸發"));
+            const audio = new Audio('https://www.w3schools.com/html/horse.mp3');
+            audio.play().catch(e => console.log("等待手動點擊觸發聲音"));
         }
 
         window.onload = initSystem;
